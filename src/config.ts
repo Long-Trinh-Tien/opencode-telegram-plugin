@@ -136,9 +136,9 @@ export function resolveConfig(): ResolvedConfig {
   const allowedUsers =
     process.env["TELEGRAM_ALLOWED_USERS"] ?? file.allowedUsers ?? "";
 
-  // Edit interval: env > file > 2500
+  // Edit interval: env > file > 500
   const envInterval = Number(process.env["TELEGRAM_EDIT_INTERVAL_MS"]);
-  let editIntervalMs = 2500;
+  let editIntervalMs = 500;
   if (Number.isFinite(envInterval) && envInterval > 0) {
     editIntervalMs = envInterval;
   } else if (

@@ -1,5 +1,4 @@
 import type { Plugin } from "@opencode-ai/plugin";
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
 import { createBot, injectClient, registerBotMenu } from "./bot.js";
 import { initMapping } from "./state/mapping.js";
@@ -81,7 +80,7 @@ function handleTelegramCommand(args: string | undefined): string {
     case "set-interval": {
       const ms = Number(rest);
       if (!rest || !Number.isFinite(ms) || ms <= 0) {
-        return "**Usage**: `/telegram set-interval <milliseconds>`\n\nSet the minimum interval between message edits during streaming.\nDefault: `2500` (2.5 seconds).";
+        return "**Usage**: `/telegram set-interval <milliseconds>`\n\nSet the minimum interval between message edits during streaming.\nDefault: `500` (0.5 seconds).";
       }
       writeConfigFile({ editIntervalMs: ms });
       return "**Edit interval saved**: `" + ms + "ms`\n\n**Restart OpenCode** for the change to take effect.";
@@ -129,7 +128,7 @@ function handleTelegramCommand(args: string | undefined): string {
         "- `/telegram remove-token` — Remove saved bot token",
         "- `/telegram set-users <id1,id2>` — Restrict bot to specific user IDs",
         "- `/telegram remove-users` — Allow all users",
-        "- `/telegram set-interval <ms>` — Set edit throttle interval (default: 2500)",
+        "- `/telegram set-interval <ms>` — Set edit throttle interval (default: 500)",
         "- `/telegram auto-attach <on|off>` — Toggle auto-attach on /start",
         "- `/telegram status` — Show resolved config (file + env)",
         "- `/telegram show` — Show raw config file contents",
@@ -151,25 +150,7 @@ function handleTelegramCommand(args: string | undefined): string {
 // ---------------------------------------------------------------------------
 
 export const TelegramPlugin: Plugin = async (ctx) => {
-  const { client, directory, serverUrl } = ctx;
-
-  // ── Create v2 SDK client (flat params, agent optional on shell) ─────────
-  // IMPORTANT: OpenCode's server does NOT listen on a TCP port.  The v1
-  // client injected via ctx.client uses a custom `fetch` that calls
-  // Server.Default().fetch() in-process (Hono app handler).  We must
-  // extract that same fetch and forward it to the v2 client so requests
-  // are routed in-process instead of over the network.
-
-  const v1Config = (client as any)?._client?.getConfig?.() ?? {};
-  const inProcessFetch = typeof v1Config.fetch === "function" ? v1Config.fetch : undefined;
-  const baseUrl = (typeof v1Config.baseUrl === "string" && v1Config.baseUrl)
-    || "http://localhost:4096"; // placeholder for URL construction
-
-  const v2 = createOpencodeClient({
-    baseUrl,
-    directory,
-    ...(inProcessFetch ? { fetch: inProcessFetch } : {}),
-  });
+  const { client: v2, directory, serverUrl } = ctx;
 
   // ── Resolve configuration (config file + env vars) ─────────────────────
   let config: ReturnType<typeof resolveConfig>;
@@ -231,7 +212,7 @@ export const TelegramPlugin: Plugin = async (ctx) => {
   await v2.app.log({
     service: "telegram-plugin",
     level: "info",
-    message: "Initializing Telegram bot (token: " + maskedToken + ", source: " + config.tokenSource + ", allowed_users: " + (config.allowedUsers || "all") + ", baseUrl: " + baseUrl + ", inProcessFetch: " + !!inProcessFetch + ")",
+    message: "Initializing Telegram bot (token: " + maskedToken + ", source: " + config.tokenSource + ", allowed_users: " + (config.allowedUsers || "all") + ", serverUrl: " + serverUrl + ")",
   });
 
   let bot: ReturnType<typeof createBot>;
@@ -248,7 +229,7 @@ export const TelegramPlugin: Plugin = async (ctx) => {
         });
       },
     });
-    injectClient(v2, baseUrl);
+    injectClient(v2, serverUrl?.toString());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await v2.app.log({
